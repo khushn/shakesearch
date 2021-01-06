@@ -4,23 +4,23 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"index/suffixarray"
 	"io/ioutil"
 	"log"
+	"math"
 	"net/http"
 	"os"
-	"strings"
 	"regexp"
-	"errors"
-	"math"
+	"strings"
 )
 
 const FILE_NAME = "completeworks.txt"
 const MAX_SEARCH_LIMIT = 100
 
 type Searcher struct {
-	CompleteWorks string	
+	CompleteWorks string
 	SuffixArray   *suffixarray.Index
 
 	Titles []string
@@ -31,28 +31,30 @@ type Searcher struct {
 	TitlesMapRev map[int]string
 	// Sorted titke index
 	SortedTitleIndex []int
+
+	// All the paragraph boundaries
+	ParaBoundaries [][]int
 }
 
 type SearchResult struct {
-	Title string `json:"bookTitle"`
-	IsBook bool `json:"IsBookSection`
+	Title       string `json:"bookTitle"`
+	IsBook      bool   `json:"IsBookSection`
 	MatchedText string `json:"matchedText"`
 }
 
 func main() {
 	searcher := Searcher{}
-	err := searcher.ReadTitles(FILE_NAME)
+	err := searcher.ReadTitlesAndParaBreaks(FILE_NAME)
 	if err != nil {
 		log.Fatal(err)
-	}
-	fmt.Printf("no. of titles, %v, titles: %+v\n", len(searcher.Titles), searcher.Titles)
+	}	
 
 	err = searcher.Load(FILE_NAME)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	err = searcher.BuildTitleIndex() 
+	err = searcher.BuildTitleIndex()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -105,7 +107,7 @@ func (s *Searcher) Load(filename string) error {
 	if err != nil {
 		return fmt.Errorf("Load: %w", err)
 	}
-	
+
 	s.CompleteWorks = string(dat)
 	s.SuffixArray = suffixarray.New(dat)
 	return nil
@@ -131,18 +133,23 @@ func (s *Searcher) Search(query string) ([]*SearchResult, int) {
 			searchRes.Title = title
 		}
 		// results = append(results, s.CompleteWorks[idx[0]-250:idx[0]+250])
-		searchRes.MatchedText = s.CompleteWorks[idx[0]-250:idx[0]+250]
+		searchRes.MatchedText = s.CompleteWorks[idx[0]-250 : idx[0]+250]
 		results = append(results, &searchRes)
 	}
 	return results, firstInd
 }
 
 // To read all the titles, between 'conteny' and first title repeat
-func (s *Searcher) ReadTitles(filename string) error {
+// Also using it catch all the para begins and ends
+// To show better result snippets
+func (s *Searcher) ReadTitlesAndParaBreaks(filename string) error {
 	var err error
 	var titles []string
-	titlesMap := make(map[string]bool)
+	titlesMap := make(map[string]bool)	
 	inTOC := false
+	titlesReadingOver := false
+	prevLineLength := 0
+	indexFromBeg := 0
 	f, err := os.Open(filename)
 	if err != nil {
 		return err
@@ -150,41 +157,66 @@ func (s *Searcher) ReadTitles(filename string) error {
 	defer f.Close()
 
 	r := bufio.NewReader(f)
+	prevLineEmpty := false
+	inSection := false
+	sectionBegin := -1
 	for err == nil {
 		var line []byte
-		line, _, err = r.ReadLine()		
+		indexFromBeg += prevLineLength
+		line, _, err = r.ReadLine()
+		prevLineLength = len(line)
 		strline := strings.TrimSpace(string(line))
 		if strline == "" {
-			continue
-		}
-
-		if inTOC {
-			// Is a title till it repeats
-			_, ok := titlesMap[strline]
-			if ok {
-				// titles over
-				break
+			if inSection {
+				paraBound := make([]int,2)
+				paraBound[0] = sectionBegin
+				paraBound[1] = indexFromBeg
+				s.ParaBoundaries = append(s.ParaBoundaries, paraBound)
 			}
-			titlesMap[strline] = true
-			titles = append(titles, strline)
-		}
+			inSection = false
+			prevLineEmpty = true
+			continue
+		} 
 
-		fmt.Printf("err: %v, line: %v\n", err, strline)
-		if strline == "Contents" {
-			fmt.Printf("Begin reading Title metadata")
-			inTOC = true
+		if !titlesReadingOver {
+			if inTOC {
+				// Is a title till it repeats
+				_, ok := titlesMap[strline]
+				if ok {
+					// titles over
+					titlesReadingOver = true
+					continue
+				}
+				titlesMap[strline] = true
+				titles = append(titles, strline)
+			}
+
+			//fmt.Printf("err: %v, line: %v\n", err, strline)
+			if strline == "Contents" {
+				fmt.Printf("Begin reading Title metadata")
+				inTOC = true
+			}
+		} else {
+			// fmt.Printf("prevLineEmpty: %v\n", prevLineEmpty)
+			if prevLineEmpty {				
+				inSection = true
+				sectionBegin = indexFromBeg
+			}
 		}
+		prevLineEmpty = false
 
 	}
 	s.Titles = titles
+
+	fmt.Printf("no. of titles, %v, titles: %+v\n", len(s.Titles), s.Titles)
+	fmt.Printf("no. of s.ParaBoundaries, %v, s.ParaBoundaries: %+v\n", len(s.ParaBoundaries), s.ParaBoundaries[0])
 	return nil
 }
 
-
-// This takes in the titles and uses the already built index to 
-// Have a collection of 
+// This takes in the titles and uses the already built index to
+// Have a collection of
 // Should be called after calling Load()
-func (s *Searcher) BuildTitleIndex() error{
+func (s *Searcher) BuildTitleIndex() error {
 	if s.SuffixArray == nil {
 		err := errors.New("Call Load() before calling BuildTitleIndex()")
 		return err
@@ -193,7 +225,7 @@ func (s *Searcher) BuildTitleIndex() error{
 	s.TitlesMap = make(map[string]int)
 	s.TitlesMapRev = make(map[int]string)
 
-	for _, title := range(s.Titles) {
+	for _, title := range s.Titles {
 		idxs := s.SuffixArray.Lookup([]byte(title), 2)
 		fmt.Printf("Debug title: %v, idxs: %v\n", title, idxs)
 		// we are interested in the 2nd one
@@ -212,17 +244,16 @@ func (s *Searcher) BuildTitleIndex() error{
 	return nil
 }
 
-
 // Find which title the search query pertains to
 // All list of titles are in 10s. No harm in using Log N solution, as it may be invoked multiple times
-func (s *Searcher) findTitleForGivenindexPosition(pos int) string{
+func (s *Searcher) findTitleForGivenindexPosition(pos int) string {
 	title := ""
 	N := len(s.SortedTitleIndex)
 	beg := 0
-	end := N-1
+	end := N - 1
 	i := (beg + end) / 2
-	for beg <= end && i < N && i>=0 {
-		if s.SortedTitleIndex[i] <= pos && (i+1 < N  && s.SortedTitleIndex[i+1] >= pos) {
+	for beg <= end && i < N && i >= 0 {
+		if s.SortedTitleIndex[i] <= pos && (i+1 < N && s.SortedTitleIndex[i+1] >= pos) {
 			// position found
 			title = s.TitlesMapRev[s.SortedTitleIndex[i]]
 			break
@@ -231,7 +262,7 @@ func (s *Searcher) findTitleForGivenindexPosition(pos int) string{
 			beg = i + 1
 		} else {
 			end = i - 1
-		}		
+		}
 		i = (beg + end) / 2
 		//fmt.Printf("beg: %v, end: %v, i: %v\n", beg, end, i)
 	}
@@ -246,7 +277,7 @@ func testFindTitleForPos(searcher *Searcher) {
 	title := searcher.findTitleForGivenindexPosition(pos)
 	fmt.Printf("title for index position: %v, is %v\n", pos, title)
 	// debug test 2
-	pos = 4740620 + 50 // THE TRAGEDY OF TITUS ANDRONICUS 
+	pos = 4740620 + 50 // THE TRAGEDY OF TITUS ANDRONICUS
 	title = searcher.findTitleForGivenindexPosition(pos)
 	fmt.Printf("title for index position: %v, is %v\n", pos, title)
 	// debug test 3
@@ -255,7 +286,7 @@ func testFindTitleForPos(searcher *Searcher) {
 	fmt.Printf("title for index position: %v, is %v\n", pos, title)
 	// debug test 4
 	// give a huge index
-	pos = 1e9	
+	pos = 1e9
 	title = searcher.findTitleForGivenindexPosition(pos)
 	fmt.Printf("title for index position: %v, is %v\n", pos, title)
 }
