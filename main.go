@@ -47,7 +47,7 @@ func main() {
 	err := searcher.ReadTitlesAndParaBreaks(FILE_NAME)
 	if err != nil {
 		log.Fatal(err)
-	}	
+	}
 
 	err = searcher.Load(FILE_NAME)
 	if err != nil {
@@ -55,6 +55,11 @@ func main() {
 	}
 
 	err = searcher.BuildTitleIndex()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = searcher.BuildParagraphIndex()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -133,7 +138,10 @@ func (s *Searcher) Search(query string) ([]*SearchResult, int) {
 			searchRes.Title = title
 		}
 		// results = append(results, s.CompleteWorks[idx[0]-250:idx[0]+250])
-		searchRes.MatchedText = s.CompleteWorks[idx[0]-250 : idx[0]+250]
+		startPara, endPara := s.findParagraphBoundsGivenindexPosition(idx[0])
+		if startPara >= 0 {
+			searchRes.MatchedText = s.CompleteWorks[startPara:endPara]
+		}
 		results = append(results, &searchRes)
 	}
 	return results, firstInd
@@ -145,7 +153,7 @@ func (s *Searcher) Search(query string) ([]*SearchResult, int) {
 func (s *Searcher) ReadTitlesAndParaBreaks(filename string) error {
 	var err error
 	var titles []string
-	titlesMap := make(map[string]bool)	
+	titlesMap := make(map[string]bool)
 	inTOC := false
 	titlesReadingOver := false
 	prevLineLength := 0
@@ -164,11 +172,12 @@ func (s *Searcher) ReadTitlesAndParaBreaks(filename string) error {
 		var line []byte
 		indexFromBeg += prevLineLength
 		line, _, err = r.ReadLine()
-		prevLineLength = len(line)
+		prevLineLength = len(string(line)) + 1 // plus 1 for new line
+		fmt.Printf("Debug indexFromBeg:%v, line: %v, prevLineLength: %v\n", indexFromBeg, string(line), prevLineLength)
 		strline := strings.TrimSpace(string(line))
 		if strline == "" {
 			if inSection {
-				paraBound := make([]int,2)
+				paraBound := make([]int, 2)
 				paraBound[0] = sectionBegin
 				paraBound[1] = indexFromBeg
 				s.ParaBoundaries = append(s.ParaBoundaries, paraBound)
@@ -176,7 +185,7 @@ func (s *Searcher) ReadTitlesAndParaBreaks(filename string) error {
 			inSection = false
 			prevLineEmpty = true
 			continue
-		} 
+		}
 
 		if !titlesReadingOver {
 			if inTOC {
@@ -198,7 +207,7 @@ func (s *Searcher) ReadTitlesAndParaBreaks(filename string) error {
 			}
 		} else {
 			// fmt.Printf("prevLineEmpty: %v\n", prevLineEmpty)
-			if prevLineEmpty {				
+			if prevLineEmpty {
 				inSection = true
 				sectionBegin = indexFromBeg
 			}
@@ -209,7 +218,7 @@ func (s *Searcher) ReadTitlesAndParaBreaks(filename string) error {
 	s.Titles = titles
 
 	fmt.Printf("no. of titles, %v, titles: %+v\n", len(s.Titles), s.Titles)
-	fmt.Printf("no. of s.ParaBoundaries, %v, s.ParaBoundaries: %+v\n", len(s.ParaBoundaries), s.ParaBoundaries[0])
+	fmt.Printf("no. of s.ParaBoundaries, %v, s.ParaBoundaries: %+v\n", len(s.ParaBoundaries), s.ParaBoundaries)
 	return nil
 }
 
@@ -244,6 +253,52 @@ func (s *Searcher) BuildTitleIndex() error {
 	return nil
 }
 
+// ReBuild Paragraph index
+func (s *Searcher) BuildParagraphIndex() error {
+	byte_arr := s.SuffixArray.Bytes()
+	//fmt.Printf("BuildParagraphIndex(), first 1000 bytes: $v\n", string(byte_arr[:1000]))
+	inPara := false
+	paraStart := -1
+	//prev_prev_ch := byte('\n')
+	//prev_ch := byte('\n')
+	var prev_ch byte
+	var prev_prev_ch byte
+	prev_ch = '\n'
+	prev_prev_ch = '\n'
+	s.ParaBoundaries = s.ParaBoundaries[:0]
+	num_newlines := 0
+	prev_ch_count := 0
+	for i, b := range byte_arr {
+		
+		if b == '\n' {
+			if prev_ch == '\n' {
+				// two consecutive '\n's
+				if inPara {
+					paraBound := make([]int, 2)
+					paraBound[0] = paraStart
+					paraBound[1] = i
+					s.ParaBoundaries = append(s.ParaBoundaries, paraBound)
+				}
+				inPara = false
+			}
+			num_newlines++
+		} else {
+			if prev_ch == '\n' && prev_prev_ch == '\n' {
+				inPara = true
+				paraStart = i
+			}
+		}
+		prev_prev_ch = prev_ch
+		prev_ch = b
+		if prev_prev_ch == '\n' {
+			prev_ch_count++
+		}
+	}
+	fmt.Printf("BuildParagraphIndex(), prev_ch_count: %v, paraStart: %v, num_newlines: %v, len(s.ParaBoundaries): %v, paraStart, s.ParaBoundaries:%v\n",
+		prev_ch_count, paraStart, num_newlines, len(s.ParaBoundaries), s.ParaBoundaries)
+	return nil
+}
+
 // Find which title the search query pertains to
 // All list of titles are in 10s. No harm in using Log N solution, as it may be invoked multiple times
 func (s *Searcher) findTitleForGivenindexPosition(pos int) string {
@@ -271,6 +326,35 @@ func (s *Searcher) findTitleForGivenindexPosition(pos int) string {
 	return title
 }
 
+// Find Paragraph bounds for given index position
+// We need log(N) here. As parabounds are in 10s of 1000s
+func (s *Searcher) findParagraphBoundsGivenindexPosition(pos int) (int, int) {
+	startBound := -1
+	endBound := -1
+	N := len(s.ParaBoundaries)
+	beg := 0
+	end := N - 1
+	i := (beg + end) / 2
+	for beg <= end && i < N && i >= 0 {
+		if s.ParaBoundaries[i][0] <= pos && (s.ParaBoundaries[i][1] >= pos) {
+			// position found
+			startBound = s.ParaBoundaries[i][0]
+			endBound = s.ParaBoundaries[i][1]
+			break
+		}
+		if s.ParaBoundaries[i][0] < pos {
+			beg = i + 1
+		} else {
+			end = i - 1
+		}
+		i = (beg + end) / 2
+		//fmt.Printf("beg: %v, end: %v, i: %v\n", beg, end, i)
+	}
+
+	fmt.Printf("Debug findParagraphBoundsGivenindexPosition() pos: %v, startBound: %v, endBound: %v\n", pos, startBound, endBound)
+	return startBound, endBound
+}
+
 func testFindTitleForPos(searcher *Searcher) {
 	// debug test 1
 	pos := 2921 // THE SONNETS
@@ -289,4 +373,16 @@ func testFindTitleForPos(searcher *Searcher) {
 	pos = 1e9
 	title = searcher.findTitleForGivenindexPosition(pos)
 	fmt.Printf("title for index position: %v, is %v\n", pos, title)
+
+	// Test pata bounds
+	// test 1 5427959 5428048
+	pos = 5427959 + 2
+	searcher.findParagraphBoundsGivenindexPosition(pos)
+
+	// test 2
+	searcher.findParagraphBoundsGivenindexPosition(0)
+
+	// test 3
+	searcher.findParagraphBoundsGivenindexPosition(1e9)
+
 }
