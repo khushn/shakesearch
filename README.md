@@ -29,4 +29,23 @@ We will be primarily evaluating based on how well the search works for users. A 
 current state, can be deployed easily on Heroku's free tier.
 3. In your submission, share with us what changes you made and how you would prioritize changes if you had more time.
 
+## What was added by Me
+
+Main stuff
+
+1. Title reading and indexing - For displaying in searches, if search text from withing a title
+2. Case insensitive search - SONNET or sonnet. 
+3. Paragrapge indexing - Rather than showing -250 to +250. I show that entire paragraph. Sometimes gets too big
+4. If Search text is from outside title, limit results and doesn't show book title. 
+5. Results are boxed back in JSON. 
+6. So had to change the React JS to extract two fields.
+7. All the indexing navigation is done in Log(N) time, so pretty decent, even for paragraph indexing
+
+## Future work - enhancements that can be done
+
+1. Indexing could be store in some persistent storage e.g. Solr or equivalent, if data gets big. May not be an issue here. 
+2. Parsing and indexing of Acts in a play, to provide back info on which Act a given search query belongs to
+3. Also perhaps thing like which character says a given query. e.g. if its a quoted text from Antonio
+
+
 
