@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"regexp"
 )
 
 const FILE_NAME = "completeworks.txt"
@@ -126,10 +127,13 @@ func (s *Searcher) Load(filename string) error {
 }
 
 func (s *Searcher) Search(query string) []string {
-	idxs := s.SuffixArray.Lookup([]byte(query), -1)
+	// regex for case ignore search
+	regex, _ := regexp.Compile("(?i)" + query + "(?-i)")
+	// idxs := s.SuffixArray.Lookup([]byte(query), -1)
+	idxs := s.SuffixArray.FindAllIndex(regex, -1)
 	results := []string{}
 	for _, idx := range idxs {
-		results = append(results, s.CompleteWorks[idx-250:idx+250])
+		results = append(results, s.CompleteWorks[idx[0]-250:idx[0]+250])
 	}
 	return results
 }
