@@ -125,7 +125,7 @@ func (s *Searcher) Search(query string) ([]*SearchResult, int) {
 	idxs := s.SuffixArray.FindAllIndex(regex, MAX_SEARCH_LIMIT)
 	firstInd := -1
 	var results []*SearchResult
-	for _, idx := range idxs {
+	for i, idx := range idxs {
 		if firstInd == -1 {
 			firstInd = idx[0]
 		}
@@ -136,6 +136,11 @@ func (s *Searcher) Search(query string) ([]*SearchResult, int) {
 			// results = append(results, "Book: " + title + "\n")
 			searchRes.IsBook = true
 			searchRes.Title = title
+		}
+
+		if i>0 && !searchRes.IsBook {
+			// no point showing junk results
+			continue
 		}
 		// results = append(results, s.CompleteWorks[idx[0]-250:idx[0]+250])
 		startPara, endPara := s.findParagraphBoundsGivenindexPosition(idx[0])
