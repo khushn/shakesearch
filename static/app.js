@@ -14,7 +14,7 @@ const Controller = {
     const table = document.getElementById("table-body");
     const rows = [];
     for (let result of results) {
-      rows.push(`<tr>${result.matchedText}<tr/>`);
+      rows.push(`<tr><td>Title: ${result.bookTitle}</td> <td>${result.matchedText}</td><tr/>`);
     }
     table.innerHTML = rows;
   },
