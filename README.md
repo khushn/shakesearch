@@ -31,6 +31,12 @@ current state, can be deployed easily on Heroku's free tier.
 
 ## What was added by Me
 
+Link to deployed Heroku app: https://khush-shakesearch.herokuapp.com/
+Sample searches to try: 
+Edward thy son, that now is Prince of Wales
+Sonnet
+Hamlet
+
 Main stuff
 
 1. Title reading and indexing - For displaying in searches, if search text from withing a title
@@ -46,6 +52,7 @@ Main stuff
 1. Indexing could be store in some persistent storage e.g. Solr or equivalent, if data gets big. May not be an issue here. 
 2. Parsing and indexing of Acts in a play, to provide back info on which Act a given search query belongs to
 3. Also perhaps thing like which character says a given query. e.g. if its a quoted text from Antonio
-
-
+4. Remove more clutter from the search results. The returned para get too big often. Take a suitable subset
+5. Suggest (auto complete) queries. Can build a lookup, which can prompt for appropriate search queries. 
+6. Spelling error tolerance. Can do a lookup based on Soundex or another suitable algo
 
