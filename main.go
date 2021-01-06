@@ -17,6 +17,7 @@ import (
 )
 
 const FILE_NAME = "completeworks.txt"
+const MAX_SEARCH_LIMIT = 100
 
 type Searcher struct {
 	CompleteWorks string	
@@ -30,6 +31,12 @@ type Searcher struct {
 	TitlesMapRev map[int]string
 	// Sorted titke index
 	SortedTitleIndex []int
+}
+
+type SearchResult struct {
+	Title string `json:"bookTitle"`
+	IsBook bool `json:"IsBookSection`
+	MatchedText string `json:"matchedText"`
 }
 
 func main() {
@@ -104,23 +111,28 @@ func (s *Searcher) Load(filename string) error {
 	return nil
 }
 
-func (s *Searcher) Search(query string) ([]string, int) {
+func (s *Searcher) Search(query string) ([]*SearchResult, int) {
 	// regex for case ignore search
 	regex, _ := regexp.Compile("(?i)" + query + "(?-i)")
 	// idxs := s.SuffixArray.Lookup([]byte(query), -1)
-	idxs := s.SuffixArray.FindAllIndex(regex, -1)
+	idxs := s.SuffixArray.FindAllIndex(regex, MAX_SEARCH_LIMIT)
 	firstInd := -1
-	results := []string{}
+	var results []*SearchResult
 	for _, idx := range idxs {
 		if firstInd == -1 {
 			firstInd = idx[0]
 		}
 		// Add Title info
+		searchRes := SearchResult{}
 		title := s.findTitleForGivenindexPosition(idx[0])
 		if len(title) > 0 {
-			results = append(results, "Book: " + title + "\n")
+			// results = append(results, "Book: " + title + "\n")
+			searchRes.IsBook = true
+			searchRes.Title = title
 		}
-		results = append(results, s.CompleteWorks[idx[0]-250:idx[0]+250])
+		// results = append(results, s.CompleteWorks[idx[0]-250:idx[0]+250])
+		searchRes.MatchedText = s.CompleteWorks[idx[0]-250:idx[0]+250]
+		results = append(results, &searchRes)
 	}
 	return results, firstInd
 }
