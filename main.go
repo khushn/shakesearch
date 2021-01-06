@@ -19,11 +19,15 @@ import (
 const FILE_NAME = "completeworks.txt"
 
 type Searcher struct {
-	CompleteWorks string
-	Titles []string
+	CompleteWorks string	
 	SuffixArray   *suffixarray.Index
+
+	Titles []string
+
 	// A map of titles as key, and value is the index where the titular chapter begins
 	TitlesMap map[string]int
+	// Reverse index of the above
+	TitlesMapRev map[int]string
 }
 
 func main() {
@@ -164,6 +168,7 @@ func (s *Searcher) BuildTitleIndex() error{
 	}
 
 	s.TitlesMap = make(map[string]int)
+	s.TitlesMapRev = make(map[int]string)
 
 	for _, title := range(s.Titles) {
 		idxs := s.SuffixArray.Lookup([]byte(title), 2)
@@ -172,9 +177,11 @@ func (s *Searcher) BuildTitleIndex() error{
 		if len(idxs) > 1 {
 			ind := int(math.Max(float64(idxs[0]), float64(idxs[1])))
 			s.TitlesMap[title] = ind
+			s.TitlesMapRev[ind] = title
 		}
 	}
 
 	fmt.Printf("Debug s.TitlesMap: %+v\n", s.TitlesMap)
+	fmt.Printf("Debug s.TitlesMapRev: %+v\n", s.TitlesMapRev)
 	return nil
 }
