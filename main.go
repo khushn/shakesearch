@@ -12,9 +12,19 @@ import (
 	"os"
 	"strings"
 	"regexp"
+	"errors"
+	"math"
 )
 
 const FILE_NAME = "completeworks.txt"
+
+type Searcher struct {
+	CompleteWorks string
+	Titles []string
+	SuffixArray   *suffixarray.Index
+	// A map of titles as key, and value is the index where the titular chapter begins
+	TitlesMap map[string]int
+}
 
 func main() {
 	searcher := Searcher{}
@@ -25,6 +35,11 @@ func main() {
 	fmt.Printf("no. of titles, %v, titles: %+v\n", len(searcher.Titles), searcher.Titles)
 
 	err = searcher.Load(FILE_NAME)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = searcher.BuildTitleIndex() 
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -46,12 +61,6 @@ func main() {
 	}
 }
 
-type Searcher struct {
-	CompleteWorks string
-	Titles []string
-	SuffixArray   *suffixarray.Index
-}
-
 func handleSearch(searcher Searcher) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		query, ok := r.URL.Query()["q"]
@@ -60,7 +69,7 @@ func handleSearch(searcher Searcher) func(w http.ResponseWriter, r *http.Request
 			w.Write([]byte("missing search query in URL params"))
 			return
 		}
-		results := searcher.Search(query[0])
+		results, _ := searcher.Search(query[0])
 		buf := &bytes.Buffer{}
 		enc := json.NewEncoder(buf)
 		err := enc.Encode(results)
@@ -85,16 +94,20 @@ func (s *Searcher) Load(filename string) error {
 	return nil
 }
 
-func (s *Searcher) Search(query string) []string {
+func (s *Searcher) Search(query string) ([]string, int) {
 	// regex for case ignore search
 	regex, _ := regexp.Compile("(?i)" + query + "(?-i)")
 	// idxs := s.SuffixArray.Lookup([]byte(query), -1)
 	idxs := s.SuffixArray.FindAllIndex(regex, -1)
+	firstInd := -1
 	results := []string{}
 	for _, idx := range idxs {
+		if firstInd == -1 {
+			firstInd = idx[0]
+		}
 		results = append(results, s.CompleteWorks[idx[0]-250:idx[0]+250])
 	}
-	return results
+	return results, firstInd
 }
 
 // To read all the titles, between 'conteny' and first title repeat
@@ -143,6 +156,25 @@ func (s *Searcher) ReadTitles(filename string) error {
 
 // This takes in the titles and uses the already built index to 
 // Have a collection of 
-func BuildTitleIndex() {
-	
+// Should be called after calling Load()
+func (s *Searcher) BuildTitleIndex() error{
+	if s.SuffixArray == nil {
+		err := errors.New("Call Load() before calling BuildTitleIndex()")
+		return err
+	}
+
+	s.TitlesMap = make(map[string]int)
+
+	for _, title := range(s.Titles) {
+		idxs := s.SuffixArray.Lookup([]byte(title), 2)
+		fmt.Printf("Debug title: %v, idxs: %v\n", title, idxs)
+		// we are interested in the 2nd one
+		if len(idxs) > 1 {
+			ind := int(math.Max(float64(idxs[0]), float64(idxs[1])))
+			s.TitlesMap[title] = ind
+		}
+	}
+
+	fmt.Printf("Debug s.TitlesMap: %+v\n", s.TitlesMap)
+	return nil
 }
