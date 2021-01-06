@@ -28,6 +28,8 @@ type Searcher struct {
 	TitlesMap map[string]int
 	// Reverse index of the above
 	TitlesMapRev map[int]string
+	// Sorted titke index
+	SortedTitleIndex []int
 }
 
 func main() {
@@ -47,6 +49,10 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	// Just to debug, if everything is fine
+	// later on, this can be moved in go test code
+	testFindTitleForPos(&searcher)
 
 	fs := http.FileServer(http.Dir("./static"))
 	http.Handle("/", fs)
@@ -108,6 +114,11 @@ func (s *Searcher) Search(query string) ([]string, int) {
 	for _, idx := range idxs {
 		if firstInd == -1 {
 			firstInd = idx[0]
+		}
+		// Add Title info
+		title := s.findTitleForGivenindexPosition(idx[0])
+		if len(title) > 0 {
+			results = append(results, "Book: " + title + "\n")
 		}
 		results = append(results, s.CompleteWorks[idx[0]-250:idx[0]+250])
 	}
@@ -178,10 +189,61 @@ func (s *Searcher) BuildTitleIndex() error{
 			ind := int(math.Max(float64(idxs[0]), float64(idxs[1])))
 			s.TitlesMap[title] = ind
 			s.TitlesMapRev[ind] = title
+			// Note: No need to sort, as it comes already sorted, because initial Titles are kept in array
+			s.SortedTitleIndex = append(s.SortedTitleIndex, ind)
 		}
 	}
 
 	fmt.Printf("Debug s.TitlesMap: %+v\n", s.TitlesMap)
 	fmt.Printf("Debug s.TitlesMapRev: %+v\n", s.TitlesMapRev)
+	fmt.Printf("Debug s.SortedTitleIndex: %+v\n", s.SortedTitleIndex)
 	return nil
+}
+
+
+// Find which title the search query pertains to
+// All list of titles are in 10s. No harm in using Log N solution, as it may be invoked multiple times
+func (s *Searcher) findTitleForGivenindexPosition(pos int) string{
+	title := ""
+	N := len(s.SortedTitleIndex)
+	beg := 0
+	end := N-1
+	i := (beg + end) / 2
+	for beg <= end && i < N && i>=0 {
+		if s.SortedTitleIndex[i] <= pos && (i+1 < N  && s.SortedTitleIndex[i+1] >= pos) {
+			// position found
+			title = s.TitlesMapRev[s.SortedTitleIndex[i]]
+			break
+		}
+		if s.SortedTitleIndex[i] < pos {
+			beg = i + 1
+		} else {
+			end = i - 1
+		}		
+		i = (beg + end) / 2
+		//fmt.Printf("beg: %v, end: %v, i: %v\n", beg, end, i)
+	}
+
+	fmt.Printf("Debug title index: %v, title: %v\n", i, title)
+	return title
+}
+
+func testFindTitleForPos(searcher *Searcher) {
+	// debug test 1
+	pos := 2921 // THE SONNETS
+	title := searcher.findTitleForGivenindexPosition(pos)
+	fmt.Printf("title for index position: %v, is %v\n", pos, title)
+	// debug test 2
+	pos = 4740620 + 50 // THE TRAGEDY OF TITUS ANDRONICUS 
+	title = searcher.findTitleForGivenindexPosition(pos)
+	fmt.Printf("title for index position: %v, is %v\n", pos, title)
+	// debug test 3
+	pos = 0 // before any title
+	title = searcher.findTitleForGivenindexPosition(pos)
+	fmt.Printf("title for index position: %v, is %v\n", pos, title)
+	// debug test 4
+	// give a huge index
+	pos = 1e9	
+	title = searcher.findTitleForGivenindexPosition(pos)
+	fmt.Printf("title for index position: %v, is %v\n", pos, title)
 }
