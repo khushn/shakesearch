@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -9,11 +10,20 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 )
+
+const FILE_NAME = "completeworks.txt"
 
 func main() {
 	searcher := Searcher{}
-	err := searcher.Load("completeworks.txt")
+	titles, err := readTitles(FILE_NAME)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("no. of titles, %v, titles: %+v\n", len(titles), titles)
+
+	err = searcher.Load(FILE_NAME)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -62,11 +72,54 @@ func handleSearch(searcher Searcher) func(w http.ResponseWriter, r *http.Request
 	}
 }
 
+// To read all the titles, between 'conteny' and first title repeat
+func readTitles(filename string) ([]string, error) {
+	var err error
+	var titles []string
+	titlesMap := make(map[string]bool)
+	inTOC := false
+	f, err := os.Open(filename)
+	if err != nil {
+		return titles, err
+	}
+	defer f.Close()
+
+	r := bufio.NewReader(f)
+	for err == nil {
+		var line []byte
+		line, _, err = r.ReadLine()		
+		strline := strings.TrimSpace(string(line))
+		if strline == "" {
+			continue
+		}
+
+		if inTOC {
+			// Is a title till it repeats
+			_, ok := titlesMap[strline]
+			if ok {
+				// titles over
+				break
+			}
+			titlesMap[strline] = true
+			titles = append(titles, strline)
+		}
+
+		fmt.Printf("err: %v, line: %v\n", err, strline)
+		if strline == "Contents" {
+			fmt.Printf("Begin reading Title metadata")
+			inTOC = true
+		}
+
+	}
+	return titles, nil
+}
+
 func (s *Searcher) Load(filename string) error {
 	dat, err := ioutil.ReadFile(filename)
 	if err != nil {
 		return fmt.Errorf("Load: %w", err)
 	}
+	
 	s.CompleteWorks = string(dat)
 	s.SuffixArray = suffixarray.New(dat)
 	return nil
