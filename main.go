@@ -18,11 +18,11 @@ const FILE_NAME = "completeworks.txt"
 
 func main() {
 	searcher := Searcher{}
-	titles, err := readTitles(FILE_NAME)
+	err := searcher.ReadTitles(FILE_NAME)
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("no. of titles, %v, titles: %+v\n", len(titles), titles)
+	fmt.Printf("no. of titles, %v, titles: %+v\n", len(searcher.Titles), searcher.Titles)
 
 	err = searcher.Load(FILE_NAME)
 	if err != nil {
@@ -48,6 +48,7 @@ func main() {
 
 type Searcher struct {
 	CompleteWorks string
+	Titles []string
 	SuffixArray   *suffixarray.Index
 }
 
@@ -73,15 +74,38 @@ func handleSearch(searcher Searcher) func(w http.ResponseWriter, r *http.Request
 	}
 }
 
+func (s *Searcher) Load(filename string) error {
+	dat, err := ioutil.ReadFile(filename)
+	if err != nil {
+		return fmt.Errorf("Load: %w", err)
+	}
+	
+	s.CompleteWorks = string(dat)
+	s.SuffixArray = suffixarray.New(dat)
+	return nil
+}
+
+func (s *Searcher) Search(query string) []string {
+	// regex for case ignore search
+	regex, _ := regexp.Compile("(?i)" + query + "(?-i)")
+	// idxs := s.SuffixArray.Lookup([]byte(query), -1)
+	idxs := s.SuffixArray.FindAllIndex(regex, -1)
+	results := []string{}
+	for _, idx := range idxs {
+		results = append(results, s.CompleteWorks[idx[0]-250:idx[0]+250])
+	}
+	return results
+}
+
 // To read all the titles, between 'conteny' and first title repeat
-func readTitles(filename string) ([]string, error) {
+func (s *Searcher) ReadTitles(filename string) error {
 	var err error
 	var titles []string
 	titlesMap := make(map[string]bool)
 	inTOC := false
 	f, err := os.Open(filename)
 	if err != nil {
-		return titles, err
+		return err
 	}
 	defer f.Close()
 
@@ -112,28 +136,13 @@ func readTitles(filename string) ([]string, error) {
 		}
 
 	}
-	return titles, nil
-}
-
-func (s *Searcher) Load(filename string) error {
-	dat, err := ioutil.ReadFile(filename)
-	if err != nil {
-		return fmt.Errorf("Load: %w", err)
-	}
-	
-	s.CompleteWorks = string(dat)
-	s.SuffixArray = suffixarray.New(dat)
+	s.Titles = titles
 	return nil
 }
 
-func (s *Searcher) Search(query string) []string {
-	// regex for case ignore search
-	regex, _ := regexp.Compile("(?i)" + query + "(?-i)")
-	// idxs := s.SuffixArray.Lookup([]byte(query), -1)
-	idxs := s.SuffixArray.FindAllIndex(regex, -1)
-	results := []string{}
-	for _, idx := range idxs {
-		results = append(results, s.CompleteWorks[idx[0]-250:idx[0]+250])
-	}
-	return results
+
+// This takes in the titles and uses the already built index to 
+// Have a collection of 
+func BuildTitleIndex() {
+	
 }
