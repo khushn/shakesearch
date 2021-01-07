@@ -33,13 +33,14 @@ current state, can be deployed easily on Heroku's free tier.
 
 Link to deployed Heroku app: https://khush-shakesearch.herokuapp.com/
 Sample searches to try: 
-Edward thy son, that now is Prince of Wales
-Sonnet
-Hamlet
+* Edward thy son, that now is Prince of Wales
+* Sonnet
+* Hamlet
+* Try any text from withing the separate titles. It should bring out the paragraph having that phrase, and the title (on the left). The para is sometimes big. 
 
 Main stuff
 
-1. Title reading and indexing - For displaying in searches, if search text from withing a title
+1. Title reading and indexing - For displaying in searches, if search text from within a title
 2. Case insensitive search - SONNET or sonnet. 
 3. Paragrapge indexing - Rather than showing -250 to +250. I show that entire paragraph. Sometimes gets too big
 4. If Search text is from outside title, limit results and doesn't show book title. 
@@ -49,7 +50,7 @@ Main stuff
 
 ## Future work - enhancements that can be done
 
-1. Indexing could be store in some persistent storage e.g. Solr or equivalent, if data gets big. May not be an issue here. 
+1. Indexing could be stored in some persistent storage e.g. Solr or equivalent, if data gets big. May not be an issue here. 
 2. Parsing and indexing of Acts in a play, to provide back info on which Act a given search query belongs to
 3. Also perhaps thing like which character says a given query. e.g. if its a quoted text from Antonio
 4. Remove more clutter from the search results. The returned para get too big often. Take a suitable subset
