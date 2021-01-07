@@ -36,7 +36,7 @@ Sample searches to try:
 * Edward thy son, that now is Prince of Wales
 * Sonnet
 * Hamlet
-* Try any text from withing the separate titles. It should bring out the paragraph having that phrase, and the title (on the left). The para is sometimes big. 
+* Try any text from within the separate titles. It should bring out the paragraph having that phrase, and the title (on the left). The para is sometimes big. 
 
 Main stuff
 
